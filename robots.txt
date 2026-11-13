@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://m-tbkh-ltwfyr-wldwt-ldhky--saefbougerra12b.replit.app/sitemap.xml
