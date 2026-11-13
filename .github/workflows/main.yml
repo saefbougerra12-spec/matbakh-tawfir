@@ -1,0 +1,67 @@
+name: Auto Publish Daily Recipe
+
+on:
+  schedule:
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generate and publish recipe with Gemini
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python3 - << 'EOF'
+          import os, json, urllib.request, datetime
+
+          api_key = os.environ["GEMINI_API_KEY"]
+          today = datetime.date.today().isoformat()
+          slug = f"recipe-{today}"
+
+          prompt = """اكتب وصفة طبخ اقتصادية ولذيذة وموفرة للميزانية باللغة العربية الفصحى السهلة والمحببة للعائلات.
+          اجعل الرد بصيغة HTML كاملة ونظيفة ومتجاوبة مع الهواتف (RTL, lang="ar") بتصميم عصري دافئ (ألوان برتقالية وبيضاء مريحة)، تحتوي على:
+          1. عنوان جذاب في وسم <title> و <h1>.
+          2. المقادير الاقتصادية الدقيقة.
+          3. طريقة التحضير خطوة بخطوة.
+          4. نصيحة للتوفير وحساب التكلفة التقريبية.
+          5. زر في الأعلى والأسفل للعودة إلى الرئيسية وحاسبة المقادير: <a href="/">العودة إلى مطبخ التوفير وحاسبة المقادير 🍲</a>.
+          اكتب كود HTML فقط بدون أي علامات markdown."""
+
+          url = f"https://googleapis.com{api_key}"
+          data = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode("utf-8")
+          req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+
+          with urllib.request.urlopen(req) as res:
+              result = json.loads(res.read().decode("utf-8"))
+              html = result["candidates"][0]["content"]["parts"][0]["text"]
+              html = html.replace("```html", "").replace("```", "").strip()
+
+          os.makedirs("recipes", exist_ok=True)
+          with open(f"recipes/{slug}.html", "w", encoding="utf-8") as f:
+              f.write(html)
+
+          if os.path.exists("sitemap.xml"):
+              with open("sitemap.xml", "r", encoding="utf-8") as f:
+                  sm = f.read()
+              new_url = f"  <url>\n    <loc>https://netlify.app{slug}.html</loc>\n    <lastmod>{today}</lastmod>\n  </url>\n</urlset>"
+              if slug not in sm and "</urlset>" in sm:
+                  sm = sm.replace("</urlset>", new_url)
+                  with open("sitemap.xml", "w", encoding="utf-8") as f:
+                      f.write(sm)
+          EOF
+
+      - name: Commit and push new recipe
+        run: |
+          git config user.name "Matbakh AI Bot"
+          git config user.email "bot@matbakh-tawfir.netlify.app"
+          git add .
+          git commit -m "نشر وصفة تلقائية جديدة بتاريخ $(date +%F)" || exit 0
+          git push
