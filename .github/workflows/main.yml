@@ -22,7 +22,7 @@ jobs:
           python3 - << 'EOF'
           import os, json, urllib.request, datetime
 
-          api_key = os.environ["GEMINI_API_KEY"]
+          api_key = os.environ.get("GEMINI_API_KEY", "").strip()
           today = datetime.date.today().isoformat()
           slug = f"recipe-{today}"
 
@@ -36,12 +36,15 @@ jobs:
           اكتب كود HTML فقط بدون أي علامات markdown."""
 
           url = f"https://googleapis.com{api_key}"
-          data = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode("utf-8")
+          payload = {"contents": [{"parts": [{"text": prompt}]}]}
+          data = json.dumps(payload).encode("utf-8")
           req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
 
           with urllib.request.urlopen(req) as res:
-              result = json.loads(res.read().decode("utf-8"))
-              html = result["candidates"][0]["content"]["parts"][0]["text"]
+              raw = json.loads(res.read().decode("utf-8"))
+              cand = next(iter(raw.get("candidates", [])), {})
+              part = next(iter(cand.get("content", {}).get("parts", [])), {})
+              html = part.get("text", "")
               html = html.replace("```html", "").replace("```", "").strip()
 
           os.makedirs("recipes", exist_ok=True)
